@@ -1,26 +1,41 @@
 import RedisSingleton from '../redis';
+import { User } from '../types/user';
 
 const redis = RedisSingleton.instance.redis;
 
 export const userRepository = {
-  async save(user: { id: string; name: string; email: string }) {
-    await redis.hset(`user:${user.id}`, {
-      name: user.name,
-      email: user.email,
-    });
-    await redis.sadd('users', user.id);
+  async save(user: User): Promise<void> {
+    const { id, ...fields } = user;
+    await redis.hset(`user:${id}`, fields as any); // Redis accepts Record<string, string>
+    await redis.sadd('users', id);
   },
 
-  async findById(id: string) {
+  async findById(id: string): Promise<User | null> {
     const user = await redis.hgetall(`user:${id}`);
-    return Object.keys(user).length === 0 ? null : { id, ...user };
+    if (Object.keys(user).length === 0) return null;
+
+    return {
+      id,
+      email: user.email,
+      username: user.username,
+      password: user.password,
+      role: user.role as User['role'],
+      classification: parseInt(user.classification) as User['classification'],
+    };
   },
 
-  async findAll() {
+  async findAll(): Promise<User[]> {
     const ids = await redis.smembers('users');
     return Promise.all(ids.map(async id => {
       const user = await redis.hgetall(`user:${id}`);
-      return { id, ...user };
+      return {
+        id,
+        email: user.email,
+        username: user.username,
+        password: user.password,
+        role: user.role as User['role'],
+        classification: parseInt(user.classification) as User['classification'],
+      };
     }));
   },
 };
